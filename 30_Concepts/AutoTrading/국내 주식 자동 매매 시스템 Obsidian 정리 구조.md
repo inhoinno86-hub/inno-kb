@@ -1,6 +1,6 @@
 ---
 type: concept
-project: auto-trading
+project: AutoTrading
 status: inbox
 visibility: private
 ---
