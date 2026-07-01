@@ -1,0 +1,29 @@
+vault_path: "/home/inno/문서/Obsidian Vault/Documents/Obsidian/INNO-KB"
+
+inbox:
+  codex_logs: "00_Inbox/codex_logs"
+  review: "00_Inbox/_review"
+  processed: "00_Inbox/_processed"
+
+nvidia:
+  base_url: "https://integrate.api.nvidia.com/v1"
+  llm_model: "meta/llama-3.1-70b-instruct"
+  embedding_model: "nvidia/nv-embedqa-e5-v5"
+  rerank_model: ""
+  timeout_seconds: 60
+
+rag:
+  vector_db: "chroma"
+  persist_dir: ".inno_rag/chroma"
+  chunk_size: 500
+  chunk_overlap: 200
+  top_k: 6
+  rerank_top_k: 3
+  index_raw_codex_logs: false
+  collection_name: "inno_obsidian_vault"
+
+safety:
+  dry_run: true
+  require_approval_for_apply: true
+  append_only: true
+  redact_secrets: true
