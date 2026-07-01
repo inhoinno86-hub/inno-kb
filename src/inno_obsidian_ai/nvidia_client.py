@@ -20,6 +20,8 @@ class NVIDIAAPIKeyMissingError(NVIDIAClientError):
 class NVIDIAClient:
     DEFAULT_EMBED_BATCH_SIZE = 1
     DEFAULT_RETRY_ATTEMPTS = 3
+    DEFAULT_RETRY_BACKOFF_SECONDS = 2.0
+    RETRY_STATUS_CODES = {429, 500, 502, 503, 504}
 
     def __init__(
         self,
@@ -30,6 +32,10 @@ class NVIDIAClient:
         rerank_model: str = "",
         api_key: str | None = None,
         timeout_seconds: int = 60,
+        batch_size: int | None = None,
+        max_retries: int | None = None,
+        retry_backoff_seconds: float | None = None,
+        max_input_chars: int | None = None,
         session: requests.Session | None = None,
     ) -> None:
         self.base_url = base_url.rstrip("/")
@@ -38,6 +44,14 @@ class NVIDIAClient:
         self.rerank_model = rerank_model.strip()
         self.api_key = self._resolve_api_key(api_key)
         self.timeout_seconds = timeout_seconds
+        self.batch_size = batch_size or self.DEFAULT_EMBED_BATCH_SIZE
+        self.max_retries = max_retries or self.DEFAULT_RETRY_ATTEMPTS
+        self.retry_backoff_seconds = (
+            retry_backoff_seconds
+            if retry_backoff_seconds is not None
+            else self.DEFAULT_RETRY_BACKOFF_SECONDS
+        )
+        self.max_input_chars = max_input_chars
         self.session = session or requests.Session()
 
     @classmethod
@@ -50,7 +64,11 @@ class NVIDIAClient:
             embedding_model=config.nvidia.embedding_model,
             rerank_model=config.nvidia.rerank_model,
             api_key=api_key,
-            timeout_seconds=config.nvidia.timeout_seconds,
+            timeout_seconds=config.embedding.timeout_seconds,
+            batch_size=config.embedding.batch_size,
+            max_retries=config.embedding.max_retries,
+            retry_backoff_seconds=config.embedding.retry_backoff_seconds,
+            max_input_chars=config.embedding.max_chunk_chars,
             session=session,
         )
 
@@ -71,7 +89,7 @@ class NVIDIAClient:
 
     def _post(self, endpoint: str, payload: dict[str, Any]) -> dict[str, Any]:
         last_error: NVIDIAClientError | None = None
-        for attempt in range(1, self.DEFAULT_RETRY_ATTEMPTS + 1):
+        for attempt in range(1, self.max_retries + 1):
             try:
                 response = self.session.post(
                     f"{self.base_url}{endpoint}",
@@ -82,9 +100,7 @@ class NVIDIAClient:
             except requests.RequestException as exc:
                 last_error = NVIDIAClientError(f"NVIDIA API request failed: {exc}")
             else:
-                if response.status_code == 429:
-                    raise NVIDIAClientError("NVIDIA API rate limit reached (HTTP 429).")
-                if response.status_code in {500, 502, 503, 504}:
+                if response.status_code in self.RETRY_STATUS_CODES:
                     last_error = NVIDIAClientError(
                         f"NVIDIA API returned HTTP {response.status_code}: {response.text[:500]}"
                     )
@@ -102,8 +118,8 @@ class NVIDIAClient:
                         raise NVIDIAClientError("NVIDIA API returned unexpected response payload.")
                     return data
 
-            if attempt < self.DEFAULT_RETRY_ATTEMPTS:
-                time.sleep(min(2 ** (attempt - 1), 4))
+            if attempt < self.max_retries:
+                time.sleep(self.retry_backoff_seconds * (2 ** (attempt - 1)))
 
         assert last_error is not None
         raise last_error
@@ -139,13 +155,30 @@ class NVIDIAClient:
             raise NVIDIAClientError("NVIDIA chat response did not contain text content.")
         return content.strip()
 
+    def _normalize_embedding_text(self, value: Any, *, index: int) -> str:
+        if value is None:
+            raise NVIDIAClientError(f"NVIDIA embedding input at index {index} was None.")
+        if not isinstance(value, str):
+            value = str(value)
+        normalized = value.strip()
+        if not normalized:
+            raise NVIDIAClientError(f"NVIDIA embedding input at index {index} was empty.")
+        if self.max_input_chars and len(normalized) > self.max_input_chars:
+            normalized = normalized[: self.max_input_chars]
+        return normalized
+
     def embed_texts(self, texts: list[str], *, input_type: str) -> list[list[float]]:
         if not texts:
             return []
 
+        normalized_texts = [
+            self._normalize_embedding_text(text, index=index)
+            for index, text in enumerate(texts)
+        ]
+
         embeddings: list[list[float]] = []
-        for start in range(0, len(texts), self.DEFAULT_EMBED_BATCH_SIZE):
-            batch = texts[start : start + self.DEFAULT_EMBED_BATCH_SIZE]
+        for start in range(0, len(normalized_texts), self.batch_size):
+            batch = normalized_texts[start : start + self.batch_size]
             payload = {
                 "model": self.embedding_model,
                 "input": batch,
@@ -156,6 +189,9 @@ class NVIDIAClient:
             rows = data.get("data")
             if not isinstance(rows, list) or not rows:
                 raise NVIDIAClientError("NVIDIA embedding response was empty.")
+
+            if len(rows) != len(batch):
+                raise NVIDIAClientError("NVIDIA embedding response size did not match the request.")
 
             for row in rows:
                 embedding = row.get("embedding") if isinstance(row, dict) else None

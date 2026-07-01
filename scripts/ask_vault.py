@@ -20,7 +20,7 @@ from inno_obsidian_ai.rag import answer_question
 from inno_obsidian_ai.vector_store import ChromaVectorStore
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("question", help="Question to ask against indexed vault")
     parser.add_argument(
@@ -28,24 +28,24 @@ def main() -> int:
         default=str(ROOT / "config" / "obsidian_ai.example.yaml"),
         help="Path to config YAML",
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     try:
         config = load_config(args.config)
         client = NVIDIAClient.from_config(config)
-        store = ChromaVectorStore(
-            persist_dir=str(config.chroma_dir),
-            collection_name=config.rag.collection_name,
-        )
-        result = answer_question(config, client, store, args.question)
+        stores = [
+            ChromaVectorStore(
+                persist_dir=str(config.chroma_dir),
+                collection_name=collection_name,
+            )
+            for collection_name in config.rag_collection_names
+        ]
+        result = answer_question(config, client, stores, args.question)
     except (NVIDIAAPIKeyMissingError, NVIDIAClientError, RuntimeError) as exc:
         print(str(exc), file=sys.stderr)
         return 2
 
-    print(result.answer)
-    print("\nSources")
-    for source in result.sources:
-        print(source)
+    print(result.to_markdown())
     return 0
 
 

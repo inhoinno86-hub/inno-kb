@@ -15,3 +15,8 @@ def test_path_confinement_accepts_child(vault: Path) -> None:
 def test_path_confinement_rejects_escape(vault: Path) -> None:
     with pytest.raises(ConfigError):
         ensure_within(vault, vault / ".." / "outside.md")
+
+
+def test_config_defaults_exclude_raw_logs_and_maps_collections(config) -> None:
+    assert "00_Inbox/codex_logs/**/*.md" in config.indexing.exclude_patterns
+    assert config.indexing.policy_for("decision", config.rag.collection_name).collection == "decisions"

@@ -58,3 +58,21 @@ def test_embed_texts_batches_large_requests() -> None:
     assert len(embeddings) == 17
     assert len(session.payloads) == 17
     assert all(len(payload["input"]) == 1 for payload in session.payloads)
+
+
+def test_embed_texts_uses_configured_batch_size() -> None:
+    session = _FakeSession()
+    client = NVIDIAClient(
+        base_url="https://integrate.api.nvidia.com/v1",
+        llm_model="test-llm",
+        embedding_model="test-embed",
+        api_key="test-key",
+        batch_size=8,
+        session=session,
+    )
+
+    embeddings = client.embed_texts(["x"] * 17, input_type="passage")
+
+    assert len(embeddings) == 17
+    assert len(session.payloads) == 3
+    assert [len(payload["input"]) for payload in session.payloads] == [8, 8, 1]

@@ -22,6 +22,35 @@ nvidia:
   embedding_model: "test-embed"
   rerank_model: ""
   timeout_seconds: 60
+indexing:
+  default_include_original_inbox_logs: false
+  note_type_policy:
+    codex_session_log:
+      index: false
+      collection: "raw_codex_logs"
+    development_log:
+      index: true
+      collection: "project_notes"
+    decision:
+      index: true
+      collection: "decisions"
+    research:
+      index: true
+      collection: "research"
+    concept:
+      index: true
+      collection: "concepts"
+    unknown:
+      index: true
+      collection: "general"
+embedding:
+  batch_size: 8
+  max_retries: 3
+  retry_backoff_seconds: 2
+  timeout_seconds: 60
+  max_chunk_chars: 200
+  passage_input_type: "passage"
+  query_input_type: "query"
 rag:
   vector_db: "chroma"
   persist_dir: ".inno_rag/chroma"
@@ -31,6 +60,10 @@ rag:
   rerank_top_k: 2
   index_raw_codex_logs: false
   collection_name: "test-vault"
+  answer_format: "markdown_with_sources"
+  min_evidence_score: null
+  max_evidence_distance: 0.8
+  require_sources: true
 safety:
   dry_run: true
   require_approval_for_apply: true
@@ -58,3 +91,8 @@ def vault(tmp_path: Path) -> Path:
 def config(vault: Path) -> AppConfig:
     config_path = write_config(vault)
     return load_config(config_path)
+
+
+@pytest.fixture()
+def config_path(vault: Path) -> Path:
+    return write_config(vault)

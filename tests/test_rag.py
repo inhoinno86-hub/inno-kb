@@ -33,7 +33,9 @@ def test_answer_question_returns_insufficient_when_distance_is_high(config) -> N
     qa = answer_question(config, _FakeClient(), _FakeStore(results), "question")
 
     assert qa.answer == "근거 부족"
-    assert qa.sources == ["- none"]
+    assert qa.sources == ["* none"]
+    assert qa.evidence["reason"] == "insufficient_relevant_context"
+    assert "## Sources" in qa.to_markdown()
 
 
 def test_answer_question_returns_answer_when_distance_is_good(config) -> None:
@@ -49,4 +51,5 @@ def test_answer_question_returns_answer_when_distance_is_good(config) -> None:
     qa = answer_question(config, _FakeClient(), _FakeStore(results), "question")
 
     assert qa.answer == "answer"
-    assert qa.sources == ["- a.md :: Document"]
+    assert qa.sources == ["1. a.md > Document"]
+    assert qa.evidence["collection"] == "test-vault"
