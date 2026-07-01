@@ -28,6 +28,8 @@ class ProposalDocument:
     created_at: str
     model: str
     source_hash: str
+    pipeline_run_id: str
+    redacted: bool
     sections: dict[str, str]
     destinations: list[DestinationNote]
 
@@ -68,6 +70,8 @@ def load_proposal(config: AppConfig, proposal_path: Path) -> ProposalDocument:
         created_at=str(frontmatter.get("created_at") or ""),
         model=str(frontmatter.get("model") or ""),
         source_hash=str(frontmatter.get("source_hash") or ""),
+        pipeline_run_id=str(frontmatter.get("pipeline_run_id") or ""),
+        redacted=bool(frontmatter.get("redacted", False)),
         sections=sections,
         destinations=extract_destinations(sections.get("Suggested Destination Notes", "")),
     )

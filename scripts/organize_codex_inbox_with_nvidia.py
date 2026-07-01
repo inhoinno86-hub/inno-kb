@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from datetime import datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -20,7 +21,14 @@ from inno_obsidian_ai.nvidia_client import (
 from inno_obsidian_ai.organizer import organize_codex_logs
 
 
-def main() -> int:
+def _parse_since(value: str) -> datetime:
+    normalized = value.strip()
+    if normalized.endswith("Z"):
+        normalized = normalized[:-1] + "+00:00"
+    return datetime.fromisoformat(normalized)
+
+
+def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--config",
@@ -28,13 +36,55 @@ def main() -> int:
         help="Path to config YAML",
     )
     parser.add_argument("--write", action="store_true", help="Write proposal files")
-    args = parser.parse_args()
+    parser.add_argument("--force", action="store_true", help="Regenerate proposals even when one already exists")
+    parser.add_argument("--no-llm", action="store_true", help="Only print candidate files without creating proposals")
+    parser.add_argument("--since", help="Only scan codex logs modified at or after the given ISO timestamp")
+    parser.add_argument("--max-files", type=int, help="Hard limit for number of source files to process")
+    return parser
+
+
+def run_organizer(
+    *,
+    config,
+    manifest: ManifestStore,
+    write: bool,
+    force: bool = False,
+    no_llm: bool = False,
+    since: datetime | None = None,
+    max_files: int | None = None,
+    pipeline_run_id: str = "",
+) -> list:
+    client = NVIDIAClient.from_config(config) if write and not no_llm else None
+    return organize_codex_logs(
+        config,
+        client,
+        manifest,
+        dry_run=not write,
+        since=since,
+        max_files=max_files,
+        force=force,
+        no_llm=no_llm,
+        pipeline_run_id=pipeline_run_id,
+    )
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = _build_parser()
+    args = parser.parse_args(argv)
 
     try:
         config = load_config(args.config)
         manifest = ManifestStore(config.manifest_path)
-        client = NVIDIAClient.from_config(config) if args.write else None
-        results = organize_codex_logs(config, client, manifest, dry_run=not args.write)
+        results = run_organizer(
+            config=config,
+            manifest=manifest,
+            write=args.write,
+            force=args.force,
+            no_llm=args.no_llm,
+            since=_parse_since(args.since) if args.since else None,
+            max_files=args.max_files,
+            pipeline_run_id="",
+        )
     except (NVIDIAAPIKeyMissingError, NVIDIAClientError) as exc:
         print(str(exc), file=sys.stderr)
         return 2
@@ -42,6 +92,8 @@ def main() -> int:
     for result in results:
         if result.skipped:
             print(f"SKIP {result.source_file} ({result.reason})")
+        elif args.no_llm:
+            print(f"CANDIDATE {result.source_file} -> {result.proposal_file} ({result.reason})")
         else:
             print(f"PROPOSAL {result.source_file} -> {result.proposal_file} ({result.reason})")
 

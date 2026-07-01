@@ -2,6 +2,16 @@
 
 Codex 작업 로그 Markdown을 Obsidian 정리 제안으로 바꾸고, 승인 후 append-only로 반영하고, 이후 Chroma 기반 RAG 검색까지 연결하는 로컬 파이프라인이다.
 
+## Phase 3 목표
+
+Phase 3는 Phase 2/2.5에 이미 구현된 기능을 자동 운영 루프로 묶는 단계다.
+
+- NVIDIA NIM 기반 proposal 생성
+- `status: approved` proposal만 append-only 반영
+- changed note만 incremental reindex
+- operation log / project dashboard 자동 갱신
+- 기본 모드는 dry-run, 기본 인덱싱 범위는 path-prefix 기반
+
 ## Phase 2.5 목표
 
 Phase 2.5는 기능 확장보다 운영 안정화가 목적이다.
@@ -76,6 +86,11 @@ NVIDIA_API_KEY is not set. Export NVIDIA_API_KEY before using NVIDIA-backed comm
 - `safety.require_approval_for_apply`
 - `safety.append_only`
 - `safety.redact_secrets`
+- `automation.max_files_per_run`
+- `automation.allow_full_vault_index`
+- `automation.default_index_path_prefixes`
+- `operation_log.destination`
+- `dashboard.path`
 
 현재 기본 embedding 모델 `nvidia/nv-embedqa-e5-v5` 기준으로 `rag.chunk_size`는 `500`부터 시작하는 편이 안전하다. 더 크게 잡으면 embedding API의 최대 token 제한에 걸릴 수 있다.
 
@@ -187,6 +202,70 @@ python3 scripts/ask_vault.py \
 * threshold: ...
 ```
 
+## Phase 3 자동 운영
+
+기본 정책:
+
+- `--write` 없이는 어떤 파일도 수정하지 않는다.
+- full vault index는 기본 차단이다.
+- 자동 운영 기본 권장 모드는 `--dry-run` 또는 `--organize-only`.
+- approved apply 자동화는 `status: approved` proposal만 처리한다.
+
+전체 dry-run:
+
+```bash
+python3 scripts/run_obsidian_ai_pipeline.py \
+  --config config/obsidian_ai.yaml \
+  --dry-run \
+  --stats
+```
+
+신규 Codex log proposal 생성만:
+
+```bash
+python3 scripts/run_obsidian_ai_pipeline.py \
+  --config config/obsidian_ai.yaml \
+  --organize-only \
+  --write \
+  --max-files 5
+```
+
+approved proposal 반영만:
+
+```bash
+python3 scripts/run_obsidian_ai_pipeline.py \
+  --config config/obsidian_ai.yaml \
+  --apply-only \
+  --write
+```
+
+특정 프로젝트 범위 incremental index:
+
+```bash
+python3 scripts/run_obsidian_ai_pipeline.py \
+  --config config/obsidian_ai.yaml \
+  --index-only \
+  --write \
+  --path-prefix "10_Projects/INNO_KIS_Trading"
+```
+
+summary/dashboard 갱신만:
+
+```bash
+python3 scripts/run_obsidian_ai_pipeline.py \
+  --config config/obsidian_ai.yaml \
+  --summary-only \
+  --write
+```
+
+cron/systemd에서 호출할 wrapper:
+
+```bash
+scripts/run_obsidian_ai_pipeline.sh --dry-run
+```
+
+운영 참고 문서는 [docs/phase-3-automation.md](/home/inno/문서/Obsidian%20Vault/Documents/Obsidian/INNO-KB/docs/phase-3-automation.md) 에 정리했다.
+
 ## End-to-End 검증
 
 1. `python3 scripts/organize_codex_inbox_with_nvidia.py --config config/obsidian_ai.yaml`
@@ -206,7 +285,9 @@ python3 scripts/ask_vault.py \
 - `status: approved` proposal만 실제 노트에 반영한다.
 - 반영은 새 파일 생성 또는 `## YYYY-MM-DD - {feature}` 섹션 append만 한다.
 - 민감 정보는 NVIDIA API 전송 전에 redaction 한다.
+- pipeline operation log는 append-only다.
+- dashboard는 marker 내부만 자동 갱신한다.
 - 처리 이력과 인덱싱 해시는 `.inno_rag/manifest.sqlite`에 저장한다.
 - 인덱싱 audit log는 `.inno_rag/logs/`에 JSONL로 남는다.
-- `config/obsidian_ai.yaml`, `.env`, `.inno_rag/`, Chroma DB, live E2E 산출물은 커밋하지 않는다.
+- `config/obsidian_ai.yaml`, `.env`, `.venv/`, `.inno_rag/`, Chroma DB, `logs/`, live E2E 산출물은 커밋하지 않는다.
 - 로컬 산출물 제외 규칙은 `.gitignore`에서 유지한다.

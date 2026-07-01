@@ -20,3 +20,6 @@ def test_path_confinement_rejects_escape(vault: Path) -> None:
 def test_config_defaults_exclude_raw_logs_and_maps_collections(config) -> None:
     assert "00_Inbox/codex_logs/**/*.md" in config.indexing.exclude_patterns
     assert config.indexing.policy_for("decision", config.rag.collection_name).collection == "decisions"
+    assert config.automation.allow_full_vault_index is False
+    assert config.operation_log.destination.endswith("Obsidian AI Pipeline Log.md")
+    assert config.dashboard.auto_section_start == "<!-- BEGIN_AUTO_OBSIDIAN_AI_DASHBOARD -->"

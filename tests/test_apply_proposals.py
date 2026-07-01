@@ -2,10 +2,19 @@ from __future__ import annotations
 
 import subprocess
 import sys
+import importlib.util
 from pathlib import Path
+
+from inno_obsidian_ai.audit import AuditLogger
+from inno_obsidian_ai.manifest import ManifestStore
 
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "apply_approved_proposals.py"
+SPEC = importlib.util.spec_from_file_location("apply_approved_proposals_script", SCRIPT)
+MODULE = importlib.util.module_from_spec(SPEC)
+assert SPEC.loader is not None
+sys.modules[SPEC.name] = MODULE
+SPEC.loader.exec_module(MODULE)
 
 
 def write_proposal(vault: Path, *, status: str, target: str, name: str = "proposal.md") -> Path:
@@ -115,3 +124,50 @@ def test_append_only_application_preserves_existing_content(config, vault: Path)
     assert "Old content" in updated
     assert "## 2026-06-30 - phase-1-1" in updated
     assert "keep append only" in updated
+
+
+def test_apply_returns_changed_notes_and_marks_applied(config, vault: Path) -> None:
+    source = vault / "00_Inbox/codex_logs/2026-06-30/working_list_2026_06_30_phase-1-2.md"
+    source.write_text("source", encoding="utf-8")
+    proposal = write_proposal(
+        vault,
+        status="approved",
+        target="10_Projects/INNO_KIS_Trading/06_Logs/Daily Dev Log.md",
+        name="approved-2.proposal.md",
+    )
+    manifest = ManifestStore(config.manifest_path)
+    audit = AuditLogger(config.audit_log_dir)
+
+    results = MODULE.apply_approved_proposals(
+        config,
+        manifest,
+        dry_run=False,
+        pipeline_run_id="run-apply",
+        audit_logger=audit,
+    )
+
+    assert results[0].changed_notes == ("10_Projects/INNO_KIS_Trading/06_Logs/Daily Dev Log.md",)
+    updated = proposal.read_text(encoding="utf-8")
+    assert 'status: applied' in updated
+    assert 'applied_run_id: run-apply' in updated
+
+
+def test_applied_proposal_is_not_appended_twice(config, vault: Path) -> None:
+    source = vault / "00_Inbox/codex_logs/2026-06-30/working_list_2026_06_30_phase-1-3.md"
+    source.write_text("source", encoding="utf-8")
+    write_proposal(
+        vault,
+        status="approved",
+        target="10_Projects/INNO_KIS_Trading/06_Logs/Daily Dev Log.md",
+        name="approved-3.proposal.md",
+    )
+    manifest = ManifestStore(config.manifest_path)
+
+    first = MODULE.apply_approved_proposals(config, manifest, dry_run=False, pipeline_run_id="run-1")
+    second = MODULE.apply_approved_proposals(config, manifest, dry_run=False, pipeline_run_id="run-2")
+
+    target = vault / "10_Projects/INNO_KIS_Trading/06_Logs/Daily Dev Log.md"
+    content = target.read_text(encoding="utf-8")
+    assert content.count("## 2026-06-30 - phase-1-1") == 1
+    assert first[0].changed_notes == ("10_Projects/INNO_KIS_Trading/06_Logs/Daily Dev Log.md",)
+    assert second[0].skipped is True

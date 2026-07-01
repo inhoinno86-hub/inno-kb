@@ -181,6 +181,35 @@ class SafetyConfig:
 
 
 @dataclass(frozen=True)
+class AutomationConfig:
+    enabled: bool
+    default_mode: str
+    max_files_per_run: int
+    organize_new_codex_logs: bool
+    apply_approved_proposals: bool
+    reindex_changed_notes: bool
+    update_daily_log: bool
+    update_project_dashboard: bool
+    allow_full_vault_index: bool
+    default_index_path_prefixes: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class OperationLogConfig:
+    enabled: bool
+    destination: str
+
+
+@dataclass(frozen=True)
+class DashboardConfig:
+    enabled: bool
+    project: str
+    path: str
+    auto_section_start: str
+    auto_section_end: str
+
+
+@dataclass(frozen=True)
 class AppConfig:
     vault_path: Path
     inbox: InboxConfig
@@ -189,6 +218,9 @@ class AppConfig:
     embedding: EmbeddingConfig
     rag: RagConfig
     safety: SafetyConfig
+    automation: AutomationConfig
+    operation_log: OperationLogConfig
+    dashboard: DashboardConfig
     config_path: Path
 
     def resolve_in_vault(self, relative_path: str | Path) -> Path:
@@ -228,6 +260,18 @@ class AppConfig:
     @property
     def rag_collection_names(self) -> tuple[str, ...]:
         return self.indexing.collection_names(self.rag.collection_name)
+
+    @property
+    def operation_log_path(self) -> Path | None:
+        if not self.operation_log.enabled or not self.operation_log.destination.strip():
+            return None
+        return self.resolve_in_vault(self.operation_log.destination)
+
+    @property
+    def dashboard_path(self) -> Path | None:
+        if not self.dashboard.enabled or not self.dashboard.path.strip():
+            return None
+        return self.resolve_in_vault(self.dashboard.path)
 
 
 def _default_note_type_policy(
@@ -302,6 +346,9 @@ def load_config(config_path: str | Path) -> AppConfig:
     embedding_raw = _require_mapping(raw.get("embedding") or {}, "embedding")
     rag_raw = _require_mapping(raw.get("rag"), "rag")
     safety_raw = _require_mapping(raw.get("safety"), "safety")
+    automation_raw = _require_mapping(raw.get("automation") or {}, "automation")
+    operation_log_raw = _require_mapping(raw.get("operation_log") or {}, "operation_log")
+    dashboard_raw = _require_mapping(raw.get("dashboard") or {}, "dashboard")
 
     inbox = InboxConfig(
         codex_logs=_require_str(inbox_raw, "codex_logs", "inbox"),
@@ -414,6 +461,70 @@ def load_config(config_path: str | Path) -> AppConfig:
         append_only=_require_bool(safety_raw, "append_only", "safety"),
         redact_secrets=_require_bool(safety_raw, "redact_secrets", "safety"),
     )
+    automation = AutomationConfig(
+        enabled=_coerce_bool(automation_raw.get("enabled"), "automation.enabled", False),
+        default_mode=str(automation_raw.get("default_mode") or "dry-run").strip() or "dry-run",
+        max_files_per_run=_coerce_int(
+            automation_raw.get("max_files_per_run"),
+            "automation.max_files_per_run",
+            10,
+        ),
+        organize_new_codex_logs=_coerce_bool(
+            automation_raw.get("organize_new_codex_logs"),
+            "automation.organize_new_codex_logs",
+            True,
+        ),
+        apply_approved_proposals=_coerce_bool(
+            automation_raw.get("apply_approved_proposals"),
+            "automation.apply_approved_proposals",
+            True,
+        ),
+        reindex_changed_notes=_coerce_bool(
+            automation_raw.get("reindex_changed_notes"),
+            "automation.reindex_changed_notes",
+            True,
+        ),
+        update_daily_log=_coerce_bool(
+            automation_raw.get("update_daily_log"),
+            "automation.update_daily_log",
+            True,
+        ),
+        update_project_dashboard=_coerce_bool(
+            automation_raw.get("update_project_dashboard"),
+            "automation.update_project_dashboard",
+            True,
+        ),
+        allow_full_vault_index=_coerce_bool(
+            automation_raw.get("allow_full_vault_index"),
+            "automation.allow_full_vault_index",
+            False,
+        ),
+        default_index_path_prefixes=_optional_patterns(
+            automation_raw.get("default_index_path_prefixes"),
+            "automation.default_index_path_prefixes",
+        ),
+    )
+    operation_log = OperationLogConfig(
+        enabled=_coerce_bool(
+            operation_log_raw.get("enabled"),
+            "operation_log.enabled",
+            False,
+        ),
+        destination=str(operation_log_raw.get("destination") or "").strip(),
+    )
+    dashboard = DashboardConfig(
+        enabled=_coerce_bool(dashboard_raw.get("enabled"), "dashboard.enabled", False),
+        project=str(dashboard_raw.get("project") or "").strip(),
+        path=str(dashboard_raw.get("path") or "").strip(),
+        auto_section_start=(
+            str(dashboard_raw.get("auto_section_start") or "<!-- BEGIN_AUTO_OBSIDIAN_AI_DASHBOARD -->").strip()
+            or "<!-- BEGIN_AUTO_OBSIDIAN_AI_DASHBOARD -->"
+        ),
+        auto_section_end=(
+            str(dashboard_raw.get("auto_section_end") or "<!-- END_AUTO_OBSIDIAN_AI_DASHBOARD -->").strip()
+            or "<!-- END_AUTO_OBSIDIAN_AI_DASHBOARD -->"
+        ),
+    )
 
     app_config = AppConfig(
         vault_path=vault_path,
@@ -423,6 +534,9 @@ def load_config(config_path: str | Path) -> AppConfig:
         embedding=embedding,
         rag=rag,
         safety=safety,
+        automation=automation,
+        operation_log=operation_log,
+        dashboard=dashboard,
         config_path=raw_path,
     )
 
@@ -431,5 +545,9 @@ def load_config(config_path: str | Path) -> AppConfig:
     app_config.processed_dir
     app_config.chroma_dir
     app_config.audit_log_dir
+    if app_config.operation_log.destination:
+        app_config.operation_log_path
+    if app_config.dashboard.path:
+        app_config.dashboard_path
 
     return app_config

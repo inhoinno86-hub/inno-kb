@@ -14,5 +14,6 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .inno_rag/
+logs/
 *.egg-info/
 config/obsidian_ai.yaml

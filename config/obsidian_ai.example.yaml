@@ -73,3 +73,27 @@ safety:
   require_approval_for_apply: true
   append_only: true
   redact_secrets: true
+
+automation:
+  enabled: false
+  default_mode: "dry-run"
+  max_files_per_run: 10
+  organize_new_codex_logs: true
+  apply_approved_proposals: true
+  reindex_changed_notes: true
+  update_daily_log: true
+  update_project_dashboard: true
+  allow_full_vault_index: false
+  default_index_path_prefixes:
+    - "10_Projects/INNO_KIS_Trading"
+
+operation_log:
+  enabled: true
+  destination: "10_Projects/INNO_KIS_Trading/06_Logs/Obsidian AI Pipeline Log.md"
+
+dashboard:
+  enabled: true
+  project: "INNO_KIS_Trading"
+  path: "10_Projects/INNO_KIS_Trading/Project Dashboard.md"
+  auto_section_start: "<!-- BEGIN_AUTO_OBSIDIAN_AI_DASHBOARD -->"
+  auto_section_end: "<!-- END_AUTO_OBSIDIAN_AI_DASHBOARD -->"

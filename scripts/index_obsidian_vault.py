@@ -55,6 +55,18 @@ class IndexJob:
     reindex_reason: str
 
 
+@dataclass(frozen=True)
+class IndexRunResult:
+    target_files: int
+    skipped_files: int
+    indexed_files: int
+    failed_files: int
+    estimated_chunks: int
+    cleaned_files: int
+    dry_run: bool
+    exit_code: int
+
+
 def should_index(config: AppConfig, relative_path: str, include_prefixes: list[str] | None = None) -> bool:
     return should_index_path(config, relative_path, include_prefixes)
 
@@ -251,6 +263,7 @@ def _process_cleanup(
     collection_filter: str | None,
     dry_run: bool,
     store_cache: dict[str, ChromaVectorStore],
+    pipeline_run_id: str = "",
 ) -> int:
     cleaned = 0
     for record, reason in _cleanup_candidates(
@@ -281,6 +294,7 @@ def _process_cleanup(
             chunk_count=record.chunk_count,
             collection=record.collection_name,
             model=record.embedding_model,
+            run_id=pipeline_run_id,
         )
         cleaned += 1
         print(
@@ -310,26 +324,46 @@ def _print_stats(
     )
 
 
-def main(argv: list[str] | None = None) -> int:
-    parser = _build_parser()
-    args = parser.parse_args(argv)
-    if args.write and args.dry_run:
-        print("Cannot use --write and --dry-run together.", file=sys.stderr)
-        return 2
+def _iter_scan_paths(config: AppConfig, candidate_paths: list[str] | tuple[str, ...] | None) -> list[Path]:
+    if candidate_paths is None:
+        return list(iter_markdown_files(config.vault_path))
 
-    dry_run = True
-    if args.write:
-        dry_run = False
-    elif args.dry_run:
-        dry_run = True
+    resolved: list[Path] = []
+    seen: set[str] = set()
+    for relative_path in candidate_paths:
+        if relative_path in seen:
+            continue
+        seen.add(relative_path)
+        path = config.resolve_in_vault(relative_path)
+        if not path.exists() or path.suffix.lower() != ".md":
+            continue
+        resolved.append(path)
+    return resolved
 
-    try:
-        config = load_config(args.config)
-        manifest = ManifestStore(config.manifest_path)
-        audit = AuditLogger(config.audit_log_dir)
-    except RuntimeError as exc:
-        print(str(exc), file=sys.stderr)
-        return 2
+
+def run_indexing(
+    config: AppConfig,
+    *,
+    write: bool,
+    dry_run: bool = False,
+    path_prefixes: list[str] | None = None,
+    collection: str | None = None,
+    force: bool = False,
+    failed_only: bool = False,
+    stats: bool = False,
+    cleanup_missing: bool = False,
+    candidate_paths: list[str] | tuple[str, ...] | None = None,
+    manifest: ManifestStore | None = None,
+    audit: AuditLogger | None = None,
+    audit_log_path: Path | None = None,
+    pipeline_run_id: str = "",
+) -> IndexRunResult:
+    if write and dry_run:
+        raise ValueError("Cannot use --write and --dry-run together.")
+
+    effective_dry_run = not write or dry_run
+    manifest = manifest or ManifestStore(config.manifest_path)
+    audit = audit or AuditLogger(config.audit_log_dir, log_path=audit_log_path)
 
     store_cache: dict[str, ChromaVectorStore] = {}
     client: NVIDIAClient | None = None
@@ -344,31 +378,31 @@ def main(argv: list[str] | None = None) -> int:
         for record in manifest.list_indexed_files(index_status="failed")
     }
 
-    for markdown_path in iter_markdown_files(config.vault_path):
+    for markdown_path in _iter_scan_paths(config, candidate_paths):
         relative_path = config.to_vault_relative(markdown_path)
-        if not should_index(config, relative_path, args.path_prefix):
+        if not should_index(config, relative_path, path_prefixes):
             continue
 
         document = load_markdown(markdown_path, config.vault_path)
         decision = decide_indexing(
             config,
             document,
-            include_prefixes=args.path_prefix,
-            collection_filter=args.collection,
+            include_prefixes=path_prefixes,
+            collection_filter=collection,
         )
         if not decision.should_index:
             continue
 
-        if args.failed_only and document.relative_path not in failed_records:
+        if failed_only and document.relative_path not in failed_records:
             continue
 
         job = _build_job(
             config,
             manifest,
             document,
-            collection_filter=args.collection,
-            include_prefixes=args.path_prefix,
-            force=args.force,
+            collection_filter=collection,
+            include_prefixes=path_prefixes or [],
+            force=force,
         )
         if job is None:
             skipped_files += 1
@@ -380,39 +414,59 @@ def main(argv: list[str] | None = None) -> int:
                 file_hash=document.file_hash,
                 collection=decision.collection_name,
                 model=config.nvidia.embedding_model,
+                run_id=pipeline_run_id,
             )
             continue
 
         jobs.append(job)
         estimated_chunks += len(job.chunks)
-        if dry_run:
+        if effective_dry_run:
             print(
                 f"DRY-RUN index {job.document.relative_path} "
                 f"(collection={job.collection_name}, chunks={len(job.chunks)}, reason={job.reindex_reason})"
             )
 
-    if args.cleanup_missing:
+    if cleanup_missing:
         try:
             cleaned_files = _process_cleanup(
                 config,
                 manifest,
                 audit,
-                include_prefixes=args.path_prefix,
-                collection_filter=args.collection,
-                dry_run=dry_run,
+                include_prefixes=path_prefixes or [],
+                collection_filter=collection,
+                dry_run=effective_dry_run,
                 store_cache=store_cache,
+                pipeline_run_id=pipeline_run_id,
             )
         except RuntimeError as exc:
             print(str(exc), file=sys.stderr)
-            return 2
+            return IndexRunResult(
+                target_files=len(jobs),
+                skipped_files=skipped_files,
+                indexed_files=indexed_files,
+                failed_files=failed_files,
+                estimated_chunks=estimated_chunks,
+                cleaned_files=cleaned_files,
+                dry_run=effective_dry_run,
+                exit_code=2,
+            )
 
-    if not dry_run:
+    if not effective_dry_run:
         try:
             if jobs:
                 client = NVIDIAClient.from_config(config)
         except (NVIDIAAPIKeyMissingError, NVIDIAClientError, RuntimeError) as exc:
             print(str(exc), file=sys.stderr)
-            return 2
+            return IndexRunResult(
+                target_files=len(jobs),
+                skipped_files=skipped_files,
+                indexed_files=indexed_files,
+                failed_files=failed_files,
+                estimated_chunks=estimated_chunks,
+                cleaned_files=cleaned_files,
+                dry_run=effective_dry_run,
+                exit_code=2,
+            )
 
         for job in jobs:
             existing = manifest.get_indexed_file(job.document.relative_path)
@@ -499,6 +553,8 @@ def main(argv: list[str] | None = None) -> int:
                     chunk_count=len(job.chunks),
                     collection=job.collection_name,
                     model=config.nvidia.embedding_model,
+                    run_id=pipeline_run_id,
+                    extra={"reason": job.reindex_reason},
                 )
                 indexed_files += 1
                 print(
@@ -537,23 +593,58 @@ def main(argv: list[str] | None = None) -> int:
                     collection=job.collection_name,
                     model=config.nvidia.embedding_model,
                     error=error,
+                    run_id=pipeline_run_id,
+                    extra={"reason": job.reindex_reason},
                 )
                 failed_files += 1
                 print(f"FAILED {job.document.relative_path} ({error})", file=sys.stderr)
 
-    if args.stats:
+    result = IndexRunResult(
+        target_files=len(jobs),
+        skipped_files=skipped_files,
+        indexed_files=indexed_files,
+        failed_files=failed_files,
+        estimated_chunks=estimated_chunks,
+        cleaned_files=cleaned_files,
+        dry_run=effective_dry_run,
+        exit_code=0 if failed_files == 0 else 2,
+    )
+    if stats:
         _print_stats(
-            target_files=len(jobs),
-            skipped_files=skipped_files,
-            indexed_files=indexed_files,
-            failed_files=failed_files,
-            estimated_chunks=estimated_chunks,
-            cleaned_files=cleaned_files,
+            target_files=result.target_files,
+            skipped_files=result.skipped_files,
+            indexed_files=result.indexed_files,
+            failed_files=result.failed_files,
+            estimated_chunks=result.estimated_chunks,
+            cleaned_files=result.cleaned_files,
         )
     else:
         print(f"Indexed files: {indexed_files}")
+    return result
 
-    return 0 if failed_files == 0 else 2
+
+def main(argv: list[str] | None = None) -> int:
+    parser = _build_parser()
+    args = parser.parse_args(argv)
+
+    try:
+        config = load_config(args.config)
+        result = run_indexing(
+            config,
+            write=args.write,
+            dry_run=args.dry_run,
+            path_prefixes=args.path_prefix,
+            collection=args.collection,
+            force=args.force,
+            failed_only=args.failed_only,
+            stats=args.stats,
+            cleanup_missing=args.cleanup_missing,
+        )
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+
+    return result.exit_code
 
 
 if __name__ == "__main__":

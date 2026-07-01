@@ -22,6 +22,16 @@ class OrganizationResult:
     file_hash: str
     skipped: bool
     reason: str
+    redacted: bool = False
+    status: str = ""
+
+
+@dataclass(frozen=True)
+class ExistingProposal:
+    relative_path: str
+    source_file: str
+    source_hash: str
+    status: str
 
 
 def detect_feature_name(relative_path: str) -> str:
@@ -103,18 +113,22 @@ def build_proposal_markdown(
     created_at: str,
     proposal_body: str,
     source_hash: str,
+    pipeline_run_id: str,
+    redacted: bool,
 ) -> str:
     frontmatter = "\n".join(
         [
             "---",
             "type: llm_organization_proposal",
             f'source_file: "{source_file}"',
+            f'source_hash: "{source_hash}"',
             f'project: "{project}"',
             f'feature: "{feature}"',
             'status: "review"',
             f'created_at: "{created_at}"',
             f'model: "{model_name}"',
-            f'source_hash: "{source_hash}"',
+            f'pipeline_run_id: "{pipeline_run_id}"',
+            f"redacted: {'true' if redacted else 'false'}",
             "---",
             "",
         ]
@@ -130,26 +144,96 @@ def proposal_output_path(config: AppConfig, source_relative_path: str, file_hash
     return config.review_dir / date_segment / filename
 
 
+def load_existing_proposals(config: AppConfig) -> list[ExistingProposal]:
+    proposals: list[ExistingProposal] = []
+    for proposal_path in sorted(config.review_dir.rglob("*.proposal.md")):
+        document = load_markdown(proposal_path, config.vault_path)
+        frontmatter = document.frontmatter
+        source_file = str(frontmatter.get("source_file") or "").strip()
+        if not source_file:
+            continue
+        proposals.append(
+            ExistingProposal(
+                relative_path=document.relative_path,
+                source_file=source_file,
+                source_hash=str(frontmatter.get("source_hash") or "").strip(),
+                status=str(frontmatter.get("status") or "review").strip() or "review",
+            )
+        )
+    return proposals
+
+
+def should_skip_existing_proposal(
+    source_file: str,
+    source_hash: str,
+    proposals: list[ExistingProposal],
+) -> tuple[bool, str]:
+    blocking_statuses = {"review", "approved", "applied"}
+    for proposal in proposals:
+        if proposal.source_hash and proposal.source_hash == source_hash:
+            return True, f"existing_source_hash:{proposal.status}"
+    for proposal in proposals:
+        if proposal.source_file == source_file and proposal.status in blocking_statuses:
+            return True, f"existing_source_file:{proposal.status}"
+    return False, ""
+
+
 def organize_codex_logs(
     config: AppConfig,
     client: NVIDIAClient | None,
     manifest: ManifestStore,
     *,
     dry_run: bool | None = None,
+    since: datetime | None = None,
+    max_files: int | None = None,
+    force: bool = False,
+    no_llm: bool = False,
+    pipeline_run_id: str = "",
 ) -> list[OrganizationResult]:
     effective_dry_run = config.safety.dry_run if dry_run is None else dry_run
     results: list[OrganizationResult] = []
+    existing_proposals = load_existing_proposals(config)
+    proposals_by_source: dict[str, list[ExistingProposal]] = {}
+    for proposal in existing_proposals:
+        proposals_by_source.setdefault(proposal.source_file, []).append(proposal)
+    selected = 0
 
     for markdown_path in sorted(config.codex_logs_dir.rglob("*.md")):
+        if since is not None:
+            modified_at = datetime.fromtimestamp(markdown_path.stat().st_mtime).astimezone()
+            if modified_at < since:
+                continue
+
         document = load_markdown(markdown_path, config.vault_path)
-        if not manifest.needs_processing("organize_source", document.relative_path, document.file_hash):
+        source_proposals = proposals_by_source.get(document.relative_path, [])
+        if not force:
+            should_skip, reason = should_skip_existing_proposal(
+                document.relative_path,
+                document.file_hash,
+                source_proposals,
+            )
+            if should_skip:
+                results.append(
+                    OrganizationResult(
+                        source_file=document.relative_path,
+                        proposal_file="",
+                        file_hash=document.file_hash,
+                        skipped=True,
+                        reason=reason,
+                        status="skipped",
+                    )
+                )
+                continue
+
+        if max_files is not None and selected >= max_files:
             results.append(
                 OrganizationResult(
                     source_file=document.relative_path,
                     proposal_file="",
                     file_hash=document.file_hash,
                     skipped=True,
-                    reason="unchanged",
+                    reason="max_files_reached",
+                    status="skipped",
                 )
             )
             continue
@@ -158,13 +242,15 @@ def organize_codex_logs(
         project = str(document.frontmatter.get("project") or detect_project_name(document.text))
         proposal_path = proposal_output_path(config, document.relative_path, document.file_hash)
         proposal_relative = config.to_vault_relative(proposal_path)
+        redacted_content = redact_secrets(document.text, enabled=config.safety.redact_secrets)
+        redacted = redacted_content != document.text
+        selected += 1
 
-        if effective_dry_run:
+        if effective_dry_run or no_llm:
             proposal_text = ""
         else:
             if client is None:
                 raise ValueError("NVIDIA client is required when dry_run is disabled.")
-            redacted_content = redact_secrets(document.text, enabled=config.safety.redact_secrets)
             system_prompt, user_prompt = build_organization_prompt(
                 document.relative_path, project, feature, redacted_content
             )
@@ -181,6 +267,8 @@ def organize_codex_logs(
                 created_at=created_at,
                 proposal_body=proposal_body,
                 source_hash=document.file_hash,
+                pipeline_run_id=pipeline_run_id,
+                redacted=redacted,
             )
 
         if proposal_text:
@@ -190,7 +278,13 @@ def organize_codex_logs(
                 "organize_source",
                 document.relative_path,
                 document.file_hash,
-                payload={"proposal_file": proposal_relative},
+                status="proposed",
+                payload={
+                    "proposal_file": proposal_relative,
+                    "pipeline_run_id": pipeline_run_id,
+                    "redacted": redacted,
+                    "status": "review",
+                },
             )
 
         results.append(
@@ -199,7 +293,15 @@ def organize_codex_logs(
                 proposal_file=proposal_relative,
                 file_hash=document.file_hash,
                 skipped=False,
-                reason="dry-run" if effective_dry_run else "created",
+                reason="no-llm"
+                if no_llm
+                else "dry-run"
+                if effective_dry_run
+                else "created",
+                redacted=redacted,
+                status="candidate"
+                if effective_dry_run or no_llm
+                else "review",
             )
         )
 
