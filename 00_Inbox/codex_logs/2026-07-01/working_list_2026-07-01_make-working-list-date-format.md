@@ -1,7 +1,7 @@
 ---
 type: codex_session_log
 source: codex
-project: INNO_KIS_Trading
+project: Codex-Workflow
 feature: make-working-list-date-format
 created: 2026-07-01
 status: inbox
