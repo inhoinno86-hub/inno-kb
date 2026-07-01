@@ -1,7 +1,9 @@
 ---
 type: decision
+scope: project
 project: Codex-Workflow
-status: inbox
+area: project
+status: active
 visibility: private
 ---
 # Codex 전역 Superpowers Workflow 설정 정리

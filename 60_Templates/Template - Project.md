@@ -1,6 +1,9 @@
 ---
 type: project
-status: active
+scope: project
+project:
+area: project
+status: inbox
 created: "{{date}}"
 tags:
   - project

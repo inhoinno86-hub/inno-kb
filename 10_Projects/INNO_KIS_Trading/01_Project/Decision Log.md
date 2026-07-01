@@ -1,3 +1,12 @@
+---
+type: decision
+scope: project
+project: INNO_KIS_Trading
+area: project
+status: active
+visibility: private
+---
+
 # Decision Log
 
 ## 목적

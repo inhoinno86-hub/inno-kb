@@ -1,7 +1,7 @@
 ---
 type: research
 scope: project
-project: INNO_KIS_Trading
+project: Codex-Workflow
 area: log
 status: active
 visibility: private

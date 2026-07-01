@@ -6,12 +6,32 @@ import re
 VAULT = Path(__file__).resolve().parent
 INBOX = VAULT / "00_Inbox"
 
-# type별 기본 이동 위치
-DEST_BY_TYPE = {
+# 전역 노트의 type별 기본 이동 위치
+GLOBAL_DEST_BY_TYPE = {
     "research": VAULT / "20_Research",
     "concept": VAULT / "30_Concepts",
     "project": VAULT / "10_Projects",
     "decision": VAULT / "50_Decisions",
+}
+
+# 프로젝트 노트의 area별 기본 이동 위치
+PROJECT_AREA_DIR = {
+    "project": "01_Project",
+    "principle": "02_Principles",
+    "research": "03_Research",
+    "development": "04_Development",
+    "experiment": "05_Experiments",
+    "log": "06_Logs",
+    "reference": "07_References",
+    "archive": "99_Archive",
+}
+
+# area가 없을 때 type으로 보수적으로 보정한다.
+FALLBACK_PROJECT_AREA_BY_TYPE = {
+    "project": "project",
+    "decision": "project",
+    "concept": "project",
+    "research": "research",
 }
 
 # 처음에는 True로 확인만 하고, 실제 이동하려면 False로 변경
@@ -66,16 +86,56 @@ def sanitize_folder_name(name: str) -> str:
     return name
 
 
-def resolve_destination_dir(note_type: str, project: str | None) -> Path | None:
+def normalize_scope(scope: str | None, project: str | None) -> str:
     """
-    type과 project 값을 기준으로 최종 이동 폴더를 결정한다.
+    scope가 비어 있으면 기존 메타데이터와의 호환을 위해 추정한다.
+    """
+    if scope:
+        return scope
 
-    예:
-    type: concept
-    project: auto-trading
-    => 30_Concepts/auto-trading
+    if project and project.lower() != "common":
+        return "project"
+
+    return "global"
+
+
+def normalize_area(area: str | None, note_type: str | None) -> str | None:
+    if area:
+        return area
+
+    if note_type:
+        return FALLBACK_PROJECT_AREA_BY_TYPE.get(note_type)
+
+    return None
+
+
+def resolve_destination_dir(
+    note_type: str | None,
+    project: str | None,
+    scope: str | None,
+    area: str | None,
+) -> Path | None:
     """
-    base_dir = DEST_BY_TYPE.get(note_type)
+    scope, type, project, area 값을 기준으로 최종 이동 폴더를 결정한다.
+    """
+    normalized_scope = normalize_scope(scope, project)
+
+    if normalized_scope == "project":
+        if not project:
+            return None
+
+        project_root = VAULT / "10_Projects" / sanitize_folder_name(project)
+        normalized_area = normalize_area(area, note_type)
+
+        if normalized_area in PROJECT_AREA_DIR:
+            return project_root / PROJECT_AREA_DIR[normalized_area]
+
+        return project_root
+
+    if not note_type:
+        return None
+
+    base_dir = GLOBAL_DEST_BY_TYPE.get(note_type)
 
     if base_dir is None:
         return None
@@ -83,7 +143,7 @@ def resolve_destination_dir(note_type: str, project: str | None) -> Path | None:
     if project:
         safe_project = sanitize_folder_name(project)
 
-        if safe_project:
+        if safe_project and safe_project.lower() != "common":
             return base_dir / safe_project
 
     return base_dir
@@ -131,6 +191,8 @@ def main():
 
         note_type = meta.get("type")
         project = meta.get("project")
+        scope = meta.get("scope")
+        area = meta.get("area")
         status = meta.get("status", "inbox")
 
         if status != "inbox":
@@ -141,10 +203,13 @@ def main():
             print("REVIEW NEEDED: missing type")
             continue
 
-        dest_dir = resolve_destination_dir(note_type, project)
+        dest_dir = resolve_destination_dir(note_type, project, scope, area)
 
         if dest_dir is None:
-            print(f"REVIEW NEEDED: unknown type -> {note_type}")
+            print(
+                "REVIEW NEEDED: "
+                f"type={note_type}, scope={scope}, project={project}, area={area}"
+            )
             continue
 
         safe_move(md_file, dest_dir)

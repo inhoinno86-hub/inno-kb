@@ -1,3 +1,12 @@
+---
+type: project
+scope: project
+project: INNO_KIS_Trading
+area: project
+status: active
+visibility: private
+---
+
 # Project Charter
 
 ## 1. 프로젝트 이름

@@ -1,5 +1,9 @@
 ---
 type: concept
+scope: project
+project:
+area: project
+status: inbox
 created: "{{date}}"
 tags:
   - concept
@@ -19,3 +23,7 @@ visibility: private
 ## 예시
 
 ## 참고 자료
+
+## 정리 메모
+
+- `scope: global`로 바꾸면 `30_Concepts`로 정리된다.

@@ -1,9 +1,13 @@
 ---
 type: project
-project: AutoTrading
-status: inbox
+scope: project
+project: INNO_KIS_Trading
+area: archive
+status: archived
 visibility: private
 ---
+
+# Legacy AutoTrading Roadmap
 
 ## Stage 0. 프로젝트 기반 구축
 

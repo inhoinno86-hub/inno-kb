@@ -1,9 +1,13 @@
 ---
 type: concept
-project: AutoTrading
-status: inbox
+scope: project
+project: INNO_KIS_Trading
+area: project
+status: active
 visibility: private
 ---
+
+# Project Operating Model
 
 Obsidian = 기획/설계/운영 지식베이스
 GitHub Repo = 실제 코드/문서/실험 결과 관리
@@ -12,7 +16,7 @@ Claude Code = AI Berkshire 기반 투자 리서치 에이전트
 AI Berkshire = AI 리서치 단계 전용 프레임워크
 Python = 데이터 수집/스크리닝/백테스트/매매 규칙 구현
 
-# 1. 개발 도구 역할 재정의
+## 1. 개발 도구 역할 재정의
 
 ## 1) Obsidian: 프로젝트 컨트롤타워
 

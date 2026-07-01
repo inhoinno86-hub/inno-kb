@@ -1,5 +1,9 @@
 ---
 type: research
+scope: project
+project:
+area: research
+status: inbox
 source:
 created: "{{date}}"
 tags:

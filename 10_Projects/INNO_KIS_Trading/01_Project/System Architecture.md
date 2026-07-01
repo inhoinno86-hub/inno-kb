@@ -1,3 +1,12 @@
+---
+type: project
+scope: project
+project: INNO_KIS_Trading
+area: project
+status: active
+visibility: private
+---
+
 # System Architecture
 
 ## 1. 시스템 개요

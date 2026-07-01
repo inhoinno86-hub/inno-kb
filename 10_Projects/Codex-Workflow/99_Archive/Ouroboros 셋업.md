@@ -1,7 +1,9 @@
 ---
 type: decision
+scope: project
 project: Codex-Workflow
-status: inbox
+area: archive
+status: archived
 visibility: private
 ---
 # Codex 전역 설정: Ouroboros + Superpowers Planning Workflow 정리

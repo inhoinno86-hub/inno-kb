@@ -1,3 +1,12 @@
+---
+type: project
+scope: project
+project: INNO_KIS_Trading
+area: project
+status: active
+visibility: private
+---
+
 # Development Roadmap
 
 ## 1. 전체 개발 로드맵
@@ -182,6 +191,25 @@
 - 동일한 config와 동일한 데이터로 동일한 후보 30개가 재현된다.
 - 각 후보 종목의 선정 사유가 기록된다.
 - 모든 수치의 출처가 기록된다.
+
+### Stage 1. phase
+
+| Stage 1 Phase | 목표                                   | 산출물                                      |
+| ------------- | ------------------------------------ | ---------------------------------------- |
+| Phase 1-1     | 정량 스크리너 요구사항 정의                      | 스크리너 설계 문서                               |
+| Phase 1-2     | 종목 universe 정의                       | KOSPI/KOSDAQ 포함·제외 기준                    |
+| Phase 1-3     | 데이터 소스 정의                            | KRX/KIS/DART 등 원천 데이터 정책                 |
+| Phase 1-4     | 정량 지표 정의                             | 가치, 수익성, 안정성, 성장성, 거래 유동성 등              |
+| Phase 1-5     | 스코어링 규칙 정의                           | 점수화 방식, 결측치 처리, no-fabrication 규칙        |
+| Phase 1-6     | 스크리너 MVP 구현                          | 후보 30개 산출 코드                             |
+| Phase 1-7     | 결과 저장/검증                             | `data/processed` 또는 `reports` 정책에 맞춘 산출물 |
+| Phase 1-8     | Stage 1 코드/문서 정합성 리뷰                 |                                          |
+| Phase 1-9     | KRX/KIND universe 실데이터 ingestion 안정화 |                                          |
+| Phase 1-10    | DART 재무 데이터 ingestion 설계             |                                          |
+| Phase 1-11    | KIS 가격/거래대금 ingestion 설계             |                                          |
+| Phase 1-12    | 실데이터 dry-run 후보 산출                   |                                          |
+
+
 
 ---
 

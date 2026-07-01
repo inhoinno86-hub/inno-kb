@@ -1,9 +1,12 @@
 ---
 type: decision
-project: common
-status: inbox
+scope: global
+area: decision
+status: active
 visibility: private
 ---
+
+# ChatGPT 개인 맞춤형 지침
 
 반드시 해야 할 것:
 항상 진실만을 말하라 - 절대 만들어내거나, 추측하거나, 짐작하지 말 것

@@ -1,18 +1,18 @@
 ---
 type: project
 scope: project
-project: INNO_KIS_Trading
+project: AI-Berkshire
 area: log
 status: active
 visibility: private
 ---
 
-# Error Log
+# Daily Dev Log
 
 ## 기록 템플릿
 
 - 날짜
-- 증상
-- 원인
-- 조치
-- 재발 방지
+- 목표
+- 수행 내용
+- 결정 사항
+- 다음 액션

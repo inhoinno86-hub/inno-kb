@@ -1,7 +1,10 @@
 ---
 type: decision
+scope: project
+project:
+area: project
+status: inbox
 created: "{{date}}"
-status: decided
 tags:
   - decision
 visibility: private
@@ -28,3 +31,7 @@ visibility: private
 ## 리스크
 
 ## 나중에 재검토할 조건
+
+## 정리 메모
+
+- `scope: global`로 바꾸면 `50_Decisions`로 정리된다.
