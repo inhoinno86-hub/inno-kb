@@ -12,6 +12,17 @@ Phase 3는 Phase 2/2.5에 이미 구현된 기능을 자동 운영 루프로 묶
 - operation log / project dashboard 자동 갱신
 - 기본 모드는 dry-run, 기본 인덱싱 범위는 path-prefix 기반
 
+## Phase 4 목표
+
+Phase 4는 Phase 3 파이프라인을 실제 운영 가능한 수준으로 단단하게 만드는 단계다.
+
+- 실행 전 preflight validator 추가
+- live write 전 위험 요소 자동 점검
+- read-only status summary 제공
+- 제한된 live rollout runbook 문서화
+- cron/systemd는 예시만 제공하고 자동 등록은 하지 않음
+- 기존 Phase 3 동작을 깨지 않도록 테스트 보강
+
 ## Phase 2.5 목표
 
 Phase 2.5는 기능 확장보다 운영 안정화가 목적이다.
@@ -211,6 +222,22 @@ python3 scripts/ask_vault.py \
 - 자동 운영 기본 권장 모드는 `--dry-run` 또는 `--organize-only`.
 - approved apply 자동화는 `status: approved` proposal만 처리한다.
 
+Phase 4 preflight validator:
+
+```bash
+python3 scripts/validate_obsidian_ai_pipeline.py \
+  --config config/obsidian_ai.yaml \
+  --check-all
+```
+
+read-only status summary:
+
+```bash
+python3 scripts/run_obsidian_ai_pipeline.py \
+  --config config/obsidian_ai.yaml \
+  --status
+```
+
 전체 dry-run:
 
 ```bash
@@ -264,7 +291,41 @@ cron/systemd에서 호출할 wrapper:
 scripts/run_obsidian_ai_pipeline.sh --dry-run
 ```
 
-운영 참고 문서는 [docs/phase-3-automation.md](/home/inno/문서/Obsidian%20Vault/Documents/Obsidian/INNO-KB/docs/phase-3-automation.md) 에 정리했다.
+safe rollout 최소 순서:
+
+1. `scripts/validate_obsidian_ai_pipeline.py --config config/obsidian_ai.yaml --check-all`
+2. `scripts/run_obsidian_ai_pipeline.py --config config/obsidian_ai.yaml --dry-run --stats`
+3. `scripts/run_obsidian_ai_pipeline.py --config config/obsidian_ai.yaml --organize-only --write --max-files 1 --stats`
+4. Obsidian에서 proposal 검토 후 `status: approved`만 수동 변경
+5. `scripts/run_obsidian_ai_pipeline.py --config config/obsidian_ai.yaml --apply-only --write --stats`
+6. `scripts/run_obsidian_ai_pipeline.py --config config/obsidian_ai.yaml --index-only --write --path-prefix "10_Projects/INNO_KIS_Trading" --stats`
+
+운영 전 체크리스트:
+
+- live write 전 반드시 preflight + full dry-run을 먼저 실행한다.
+- full vault index는 기본 금지이며 `--force-full-index`와 config 허용이 둘 다 있어야만 가능하다.
+- 기본 운영 범위는 `path-prefix`로 제한한다.
+- `status: approved`가 아닌 proposal은 apply하지 않는다.
+- `config/obsidian_ai.yaml`, `.env`, `.venv/`, `.inno_rag/`, `logs/`, Chroma DB는 커밋하지 않는다.
+
+권장 운영 모드:
+
+- `--dry-run --stats`
+- `--organize-only --write --max-files 1`
+- `--apply-only --write`
+- `--index-only --write --path-prefix ...`
+
+금지 또는 비권장 운영 모드:
+
+- default full vault live index
+- 승인되지 않은 proposal apply
+- 첫 rollout에서 넓은 범위 write
+- secret 값을 CLI, 문서, 로그에 직접 남기는 방식
+
+운영 참고 문서:
+
+- [docs/phase-3-automation.md](/home/inno/문서/Obsidian%20Vault/Documents/Obsidian/INNO-KB/docs/phase-3-automation.md)
+- [docs/phase-4-operational-hardening.md](/home/inno/문서/Obsidian%20Vault/Documents/Obsidian/INNO-KB/docs/phase-4-operational-hardening.md)
 
 ## End-to-End 검증
 

@@ -22,8 +22,10 @@ from inno_obsidian_ai.manifest import ManifestStore
 from inno_obsidian_ai.pipeline import (
     PipelineSummary,
     append_operation_log,
+    collect_pipeline_status,
     generate_run_id,
     parse_since,
+    render_pipeline_status,
     summarize_next_action,
     update_dashboard,
 )
@@ -51,6 +53,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--no-llm", action="store_true", help="Do not call the LLM; only print organize candidates")
     parser.add_argument("--audit-log", help="Custom audit log JSONL path, relative to the vault unless absolute")
     parser.add_argument("--force", action="store_true", help="Force proposal regeneration or reindex when supported")
+    parser.add_argument("--status", action="store_true", help="Print read-only pipeline status summary")
     parser.add_argument(
         "--force-full-index",
         action="store_true",
@@ -135,15 +138,21 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     try:
+        config = load_config(args.config)
+        path_prefixes = _resolve_path_prefixes(config, args)
+        if args.status:
+            manifest = (
+                ManifestStore(config.manifest_path, initialize=False)
+                if config.manifest_path.exists()
+                else None
+            )
+            print(render_pipeline_status(collect_pipeline_status(config, manifest, path_prefixes=path_prefixes)))
+            return 0
+
         mode = _resolve_mode(args)
         dry_run = _resolve_dry_run(args)
-        config = load_config(args.config)
-        manifest = ManifestStore(config.manifest_path)
-        audit_log_path = _resolve_audit_log_path(config, args.audit_log)
-        audit = AuditLogger(config.audit_log_dir, log_path=audit_log_path)
         run_id = generate_run_id()
         max_files = args.max_files if args.max_files is not None else config.automation.max_files_per_run
-        path_prefixes = _resolve_path_prefixes(config, args)
         since = parse_since(args.since) if args.since else None
     except ValueError as exc:
         print(str(exc), file=sys.stderr)
@@ -166,6 +175,11 @@ def main(argv: list[str] | None = None) -> int:
         run_organize = config.automation.organize_new_codex_logs and not args.approved_only
         run_apply = config.automation.apply_approved_proposals
         run_summary = config.automation.update_daily_log or config.automation.update_project_dashboard
+
+    need_manifest = run_organize or run_apply or run_index or (run_summary and not dry_run)
+    manifest = ManifestStore(config.manifest_path) if need_manifest else None
+    audit_log_path = _resolve_audit_log_path(config, args.audit_log)
+    audit = AuditLogger(config.audit_log_dir, log_path=audit_log_path) if (run_apply or run_index) else None
 
     if run_organize:
         results = run_organizer(

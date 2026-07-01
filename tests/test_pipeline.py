@@ -157,6 +157,78 @@ def test_pipeline_stats_include_expected_fields(config_path: Path, capsys) -> No
     assert "cleaned=" in output
 
 
+def test_pipeline_status_reports_proposal_counts_without_writing_manifest(
+    config_path: Path,
+    vault: Path,
+    capsys,
+) -> None:
+    review_dir = vault / "00_Inbox/_review/2026-06-30"
+    review_dir.mkdir(parents=True, exist_ok=True)
+    (review_dir / "review.proposal.md").write_text(
+        """---
+source_file: "00_Inbox/codex_logs/2026-06-30/a.md"
+project: "INNO_KIS_Trading"
+feature: "review-item"
+status: "review"
+created_at: "2026-06-30T10:00:00+09:00"
+model: "test"
+source_hash: "hash-review"
+pipeline_run_id: "run-review"
+redacted: false
+---
+
+## Summary
+
+- review
+""",
+        encoding="utf-8",
+    )
+    (review_dir / "applied.proposal.md").write_text(
+        """---
+source_file: "00_Inbox/codex_logs/2026-06-30/b.md"
+project: "INNO_KIS_Trading"
+feature: "applied-item"
+status: "applied"
+created_at: "2026-06-30T11:00:00+09:00"
+model: "test"
+source_hash: "hash-applied"
+pipeline_run_id: "run-applied"
+redacted: false
+---
+
+## Decisions
+
+- applied
+""",
+        encoding="utf-8",
+    )
+    (review_dir / "approved.proposal.md").write_text(
+        """---
+source_file: "00_Inbox/codex_logs/2026-06-30/c.md"
+project: "INNO_KIS_Trading"
+feature: "approved-item"
+status: "approved"
+created_at: "2026-06-30T12:00:00+09:00"
+model: "test"
+source_hash: "hash-approved"
+pipeline_run_id: "run-approved"
+redacted: false
+---
+
+## TODO
+
+- approved
+""",
+        encoding="utf-8",
+    )
+
+    assert MODULE.main(["--config", str(config_path), "--status"]) == 0
+    output = capsys.readouterr().out
+    assert "proposal_status: review=1 approved=1 applied=1 rejected=0" in output
+    assert "recent_applied_proposal: 00_Inbox/_review/2026-06-30/applied.proposal.md (applied-item)" in output
+    assert not (vault / ".inno_rag/manifest.sqlite").exists()
+
+
 def test_audit_log_records_pipeline_run_id(config, vault: Path) -> None:
     audit = AuditLogger(config.audit_log_dir)
     audit.log(action="index", vault_relative_path="a.md", status="indexed", run_id="run-9")
@@ -210,7 +282,9 @@ def test_shell_wrapper_missing_config_returns_clear_error(tmp_path: Path) -> Non
     )
     wrapper.chmod(0o755)
     (tmp_path / ".venv/bin").mkdir(parents=True)
-    (tmp_path / ".venv/bin/activate").write_text("true\n", encoding="utf-8")
+    python_bin = tmp_path / ".venv/bin/python"
+    python_bin.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+    python_bin.chmod(0o755)
 
     result = subprocess.run(
         [str(wrapper)],

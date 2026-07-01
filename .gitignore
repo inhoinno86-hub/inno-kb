@@ -17,3 +17,6 @@ __pycache__/
 logs/
 *.egg-info/
 config/obsidian_ai.yaml
+00_Inbox/_review/**/*.proposal.md
+10_Projects/INNO_KIS_Trading/06_Logs/Obsidian AI Pipeline Log.md
+10_Projects/INNO_KIS_Trading/Project Dashboard.md

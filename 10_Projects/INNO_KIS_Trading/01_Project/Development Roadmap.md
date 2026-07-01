@@ -194,25 +194,51 @@ visibility: private
 
 ### Stage 1. phase
 
-| Stage 1 Phase | 목표                                               | 산출물                                      |
-| ------------- | ------------------------------------------------ | ---------------------------------------- |
-| Phase 1-1     | 정량 스크리너 요구사항 정의                                  | 스크리너 설계 문서                               |
-| Phase 1-2     | 종목 universe 정의                                   | KOSPI/KOSDAQ 포함·제외 기준                    |
-| Phase 1-3     | 데이터 소스 정의                                        | KRX/KIS/DART 등 원천 데이터 정책                 |
-| Phase 1-4     | 정량 지표 정의                                         | 가치, 수익성, 안정성, 성장성, 거래 유동성 등              |
-| Phase 1-5     | 스코어링 규칙 정의                                       | 점수화 방식, 결측치 처리, no-fabrication 규칙        |
-| Phase 1-6     | 스크리너 MVP 구현                                      | 후보 30개 산출 코드                             |
-| Phase 1-7     | 결과 저장/검증                                         | `data/processed` 또는 `reports` 정책에 맞춘 산출물 |
-| Phase 1-8     | Stage 1 코드/문서 정합성 리뷰                             |                                          |
-| Phase 1-9     | KRX/KIND universe 실데이터 ingestion 안정화             |                                          |
-| Phase 1-10    | DART 재무 데이터 ingestion 설계                         |                                          |
-| Phase 1-11    | KIS 가격/거래대금 ingestion 설계                         |                                          |
-| Phase 1-12    | 실데이터 dry-run 후보 산출                               |                                          |
-| Phase 1-13    | verified input schema 예시와 sample contract 정리     |                                          |
-| Phase 1-14    | KRX/KIND 실제 universe 저장 workflow 구현              |                                          |
-| Phase 1-15    | DART 실제 응답 fixture 확장 및 account mapping 정책       |                                          |
-| Phase 1-16    | KIS market-data fixture 확장 및 liquidity metric 연결 |                                          |
-| Phase 1-17    | verified local input 기반 real dry-run 1회 수동 검증    |                                          |
+| Stage 1 Phase | 목표                                                         | 산출물                                      |
+| ------------- | ---------------------------------------------------------- | ---------------------------------------- |
+| Phase 1-1     | 정량 스크리너 요구사항 정의                                            | 스크리너 설계 문서                               |
+| Phase 1-2     | 종목 universe 정의                                             | KOSPI/KOSDAQ 포함·제외 기준                    |
+| Phase 1-3     | 데이터 소스 정의                                                  | KRX/KIS/DART 등 원천 데이터 정책                 |
+| Phase 1-4     | 정량 지표 정의                                                   | 가치, 수익성, 안정성, 성장성, 거래 유동성 등              |
+| Phase 1-5     | 스코어링 규칙 정의                                                 | 점수화 방식, 결측치 처리, no-fabrication 규칙        |
+| Phase 1-6     | 스크리너 MVP 구현                                                | 후보 30개 산출 코드                             |
+| Phase 1-7     | 결과 저장/검증                                                   | `data/processed` 또는 `reports` 정책에 맞춘 산출물 |
+| Phase 1-8     | Stage 1 코드/문서 정합성 리뷰                                       |                                          |
+| Phase 1-9     | KRX/KIND universe 실데이터 ingestion 안정화                       |                                          |
+| Phase 1-10    | DART 재무 데이터 ingestion 설계                                   |                                          |
+| Phase 1-11    | KIS 가격/거래대금 ingestion 설계                                   |                                          |
+| Phase 1-12    | 실데이터 dry-run 후보 산출                                         |                                          |
+| Phase 1-13    | verified input schema 예시와 sample contract 정리               |                                          |
+| Phase 1-14    | KRX/KIND 실제 universe 저장 workflow 구현                        |                                          |
+| Phase 1-15    | DART 실제 응답 fixture 확장 및 account mapping 정책                 |                                          |
+| Phase 1-16    | KIS market-data fixture 확장 및 liquidity metric 연결           |                                          |
+| Phase 1-17    | verified local input 기반 real dry-run 1회 수동 검증              |                                          |
+| Phase 1-18    | KRX/KIND 실제 universe 파일 생성 및 verified universe contract 통과 |                                          |
+| Phase 1-19    | DART 실제 financial input 생성 workflow 설계                     |                                          |
+| Phase 1-20    | DART sanitized 실제 응답 기반 account mapping 보강                 |                                          |
+| Phase 1-21    | KIS 실제 market/liquidity input 생성 workflow 설계               |                                          |
+| Phase 1-22    | verified input 3종으로 real dry-run 1회 수행                     |                                          |
+| Phase 1-23    | DART credentials/local raw 준비 정책 확정                        |                                          |
+| Phase 1-24    | universe 기반 DART 대상 종목 mapping 검증                          |                                          |
+| Phase 1-25    | DART financial input 1차 생성 dry-run                         |                                          |
+| Phase 1-26    | KIS market input 1차 생성 dry-run                             |                                          |
+| Phase 1-27    | verified input 3종 validation-only 실행                       |                                          |
+| Phase 1-28    | real dry-run 후보 30개 산출                                     |                                          |
+| Phase 1-29    | DART corpCode.xml 공식 다운로드/local ZIP 처리 workflow 수동 검증      |                                          |
+| Phase 1-30    | KRX universe와 DART corp mapping join coverage 확인           |                                          |
+| Phase 1-31    | 소수 종목 기준 DART financial raw 수집 또는 local raw 검증             |                                          |
+| Phase 1-32    | financial input 1차 생성                                      |                                          |
+| Phase 1-33    | KIS market input 1차 생성                                     |                                          |
+| Phase 1-34    | verified input 3종 validation-only                          |                                          |
+| Phase 1-35    | real candidate dry-run                                     |                                          |
+| Phase 1-36    | DART corpCode ZIP/XML 확보 및 corp mapping 생성                 |                                          |
+| Phase 1-37    | universe × corp mapping coverage 실측                        |                                          |
+| Phase 1-38    | DART small-sample financial raw 수집/검증                      |                                          |
+| Phase 1-39    | financial metrics input 생성                                 |                                          |
+| Phase 1-40    | KIS small-sample market raw 수집/검증                          |                                          |
+| Phase 1-41    | market/liquidity input 생성                                  |                                          |
+| Phase 1-42    | verified input 3종 validation-only                          |                                          |
+| Phase 1-43    | real candidate dry-run                                     |                                          |
 
 
 ---

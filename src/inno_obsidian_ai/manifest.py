@@ -53,10 +53,11 @@ class IndexedChunkRecord:
 
 
 class ManifestStore:
-    def __init__(self, db_path: Path) -> None:
+    def __init__(self, db_path: Path, *, initialize: bool = True) -> None:
         self.db_path = db_path
-        self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        self._init_db()
+        if initialize:
+            self.db_path.parent.mkdir(parents=True, exist_ok=True)
+            self._init_db()
 
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
